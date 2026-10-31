@@ -1,0 +1,252 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Floating Crystal Animation</title>
+
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+  background: #000;
+}
+
+canvas {
+  display: block;
+}
+</style>
+</head>
+
+<body>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+
+// SCENE
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
+// CAMERA
+const camera = new THREE.PerspectiveCamera(
+  45,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  100
+);
+
+camera.position.set(0, 0, 13);
+
+// RENDERER
+const renderer = new THREE.WebGLRenderer({
+  antialias: true
+});
+
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.5;
+
+document.body.appendChild(renderer.domElement);
+
+// LIGHTS
+scene.add(new THREE.AmbientLight(0xffffff, 1.3));
+
+const whiteLight = new THREE.PointLight(0xffffff, 100);
+whiteLight.position.set(4, 5, 7);
+scene.add(whiteLight);
+
+const purpleLight = new THREE.PointLight(0x9b65ff, 90);
+purpleLight.position.set(-5, 2, 3);
+scene.add(purpleLight);
+
+const pinkLight = new THREE.PointLight(0xffa5dc, 65);
+pinkLight.position.set(2, -5, 2);
+scene.add(pinkLight);
+
+// CRYSTAL CREATOR
+function createCrystal(size, color) {
+
+  const group = new THREE.Group();
+
+  const sides = 6;
+  const rings = [
+    { y: -1.0, radius: 0.55 },
+    { y: 0.65, radius: 0.55 },
+    { y: 1.45, radius: 0.05 }
+  ];
+
+  const vertices = [];
+  const indices = [];
+
+  // Build crystal rings
+  rings.forEach((ring, ringIndex) => {
+    for (let i = 0; i < sides; i++) {
+      const angle = (i / sides) * Math.PI * 2
+        + (ringIndex % 2) * 0.12;
+
+      const variation = 1 + 0.06 * Math.sin(i * 5);
+
+      vertices.push(
+        Math.cos(angle) * ring.radius * variation,
+        ring.y,
+        Math.sin(angle) * ring.radius * variation
+      );
+    }
+  });
+
+  // Triangular facets
+  for (let i = 0; i < sides; i++) {
+    const next = (i + 1) % sides;
+
+    // Long crystal body
+    indices.push(i, next, sides + i);
+    indices.push(next, sides + next, sides + i);
+
+    // Pointed crystal tip
+    indices.push(
+      sides + i,
+      sides + next,
+      sides * 2 + i
+    );
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(vertices, 3)
+  );
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  const material = new THREE.MeshPhysicalMaterial({
+    color: color,
+    metalness: 0.08,
+    roughness: 0.08,
+    transmission: 0.65,
+    thickness: 2.5,
+    ior: 1.5,
+    clearcoat: 1,
+    clearcoatRoughness: 0.04,
+    flatShading: true,
+    side: THREE.DoubleSide
+  });
+
+  const crystal = new THREE.Mesh(geometry, material);
+  crystal.scale.set(size, size, size);
+  group.add(crystal);
+
+  // Bright crystal edges
+  const edges = new THREE.EdgesGeometry(geometry);
+
+  const outline = new THREE.LineSegments(
+    edges,
+    new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.7
+    })
+  );
+
+  outline.scale.copy(crystal.scale);
+  group.add(outline);
+
+  return group;
+}
+
+// CRYSTAL COLLECTION
+const crystals = [];
+
+const settings = [
+  [-4.3, 1.5, -1, 1.2, 0xd9c4ff],
+  [3.8, 1.7, -2, 1.5, 0xe5d5ff],
+  [-2.5, -2.5, -1, 0.8, 0xffc9e7],
+  [2.5, -2.7, -2, 1.1, 0xcbb5ff],
+  [0, 3.2, -3, 0.75, 0xf0eaff],
+  [0, -3.5, -2, 0.9, 0xc9e9ff]
+];
+
+settings.forEach((data, i) => {
+  const crystal = createCrystal(data[3], data[4]);
+
+  crystal.position.set(data[0], data[1], data[2]);
+
+  crystal.rotation.set(
+    Math.random() * 2,
+    Math.random() * 2,
+    Math.random() * 2
+  );
+
+  scene.add(crystal);
+
+  crystals.push({
+    object: crystal,
+    originalX: data[0],
+    originalY: data[1],
+    speed: 0.3 + i * 0.08,
+    phase: i * 1.4
+  });
+});
+
+// ANIMATION
+const clock = new THREE.Clock();
+
+function animate() {
+
+  requestAnimationFrame(animate);
+
+  const time = clock.getElapsedTime();
+
+  crystals.forEach((item) => {
+
+    const crystal = item.object;
+
+    // Floating movement
+    crystal.position.y =
+      item.originalY +
+      Math.sin(time * item.speed + item.phase) * 0.35;
+
+    crystal.position.x =
+      item.originalX +
+      Math.cos(time * 0.3 + item.phase) * 0.15;
+
+    // Slow rotation
+    crystal.rotation.x += 0.002;
+    crystal.rotation.y += 0.004;
+    crystal.rotation.z += 0.001;
+  });
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// MOBILE RESIZE
+window.addEventListener("resize", () => {
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+  );
+});
+
+</script>
+</body>
+</html>
